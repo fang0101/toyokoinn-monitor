@@ -1,0 +1,11 @@
+{
+  "name": "toyoko-monitor",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/monitor.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.47.0"
+  }
+}
