@@ -5,10 +5,8 @@
   "scripts": {
     "start": "node src/monitor.mjs"
   },
-  "devDependencies": {
-    "@playwright/test": "1.46.1"
-  },
   "dependencies": {
+    "playwright": "1.46.1",
     "express": "^5.1.0"
   }
 }
