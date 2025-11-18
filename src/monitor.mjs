@@ -59,25 +59,23 @@ async function monitorToyoko() {
     try {
       await page.goto(url, { timeout: 60000 });
       await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(3000); // 等 CSR 渲染
 
-      // ========================
-      // ⭐ 重點：抓房型卡片（正確位置）
-      // ========================
-      const cards = page.locator(
-        '[class*="SearchResultRoomPlanParentCard_card-wrapper"]'
+      // ⭐⭐ 等真正房型渲染完成（重點！）
+      await page.waitForSelector(
+        'div[class*="SearchResultRoomPlanParentCard_card-wrapper"] h2',
+        { timeout: 10000 }
       );
 
+      // 抓有房型的卡片
+      const cards = page.locator('div[class*="SearchResultRoomPlanParentCard_card-wrapper"]');
       const count = await cards.count();
 
       if (count === 0) {
         console.log("❌ 無房");
       } else {
-        console.log(`🎉 有房！共 ${count} 種房型`);
+        console.log(`🎉 有房！！！共 ${count} 種房型`);
+      }{
 
-        if (!notifiedOnce) {
-          await sendText(`🎉 Toyoko 有房！共有 ${count} 種房型！`);
-        }
 
         for (let i = 0; i < count; i++) {
           const card = cards.nth(i);
