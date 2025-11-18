@@ -1,5 +1,17 @@
 import playwright from "playwright";
+import express from "express";
 
+// ====== 啟動 Express 讓 Render 健康檢查通過 ======
+const app = express();
+app.get("/", (req, res) => {
+  res.send("Toyoko Monitor Running");
+});
+app.listen(process.env.PORT || 3000, () => {
+  console.log(`🌍 Web server running on port ${process.env.PORT || 3000}`);
+});
+
+
+// ====== LINE 訊息 ======
 async function sendLineMessage(message) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   const to = process.env.LINE_USER_ID;
@@ -30,6 +42,8 @@ async function sendLineMessage(message) {
   }
 }
 
+
+// ====== 主監控程式 ======
 async function monitorToyoko() {
   const browser = await playwright.chromium.launch({ headless: true });
   const page = await browser.newPage();
@@ -55,17 +69,17 @@ async function monitorToyoko() {
       } else {
         console.log("🎉 有房！！！");
         await sendLineMessage("🎉 Toyoko Inn 有房間了！！快去搶！！");
-        // 保持服務不結束。若你想結束，取消下面註解:
-        // break;
+        // ※ 若你只想通知一次並停止 → 可加 break
       }
 
     } catch (err) {
-      console.log("⚠️ 錯誤：", err.message);
+      console.error("⚠️ 錯誤：", err);
     }
 
     console.log("⏳ 等 30 秒後再檢查...");
     await page.waitForTimeout(30000);
   }
 }
+
 
 monitorToyoko();
