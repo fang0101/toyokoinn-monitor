@@ -51,7 +51,7 @@ async function monitorToyoko() {
 
       if (noResult) {
         console.log("❌ 沒房");
-        await sendLineMessage("Toyoko Inn 目前沒有房間…");
+        //await sendLineMessage("Toyoko Inn 目前沒有房間…");
       } else {
         console.log("🎉 有房！！！");
         await sendLineMessage("🎉 Toyoko Inn 有房間了！！快去搶！！");
