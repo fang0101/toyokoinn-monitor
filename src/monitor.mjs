@@ -1,8 +1,9 @@
+import "dotenv/config";
 import playwright from "playwright";
 import express from "express";
 
 // ========================
-// Render 健康檢查
+// Render 本地/雲端 健康檢查伺服器
 // ========================
 const app = express();
 app.get("/", (req, res) => res.send("Toyoko Monitor Running"));
@@ -11,9 +12,11 @@ app.listen(process.env.PORT || 3000);
 const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
 // ========================
-// LINE 傳文字
+// LINE Notify 傳文字
 // ========================
 async function sendText(msg) {
+  if (!LINE_TOKEN) return console.log("⚠️ 無 LINE TOKEN，跳過通知");
+
   await fetch("https://notify-api.line.me/api/notify", {
     method: "POST",
     headers: {
@@ -25,11 +28,13 @@ async function sendText(msg) {
 }
 
 // ========================
-// LINE 傳圖片
+// LINE Notify 傳圖片
 // ========================
 async function sendImage(imageBuffer) {
+  if (!LINE_TOKEN) return;
+
   const form = new FormData();
-  form.append("message", "房間圖片如下：");
+  form.append("message", "房型圖片如下：");
   form.append("imageFile", new Blob([imageBuffer]), "room.jpg");
 
   await fetch("https://notify-api.line.me/api/notify", {
@@ -42,79 +47,103 @@ async function sendImage(imageBuffer) {
 }
 
 // ========================
-// 監控邏輯
+// Anti-bot browser launcher
+// ========================
+async function launchAntiBotBrowser() {
+  const browser = await playwright.chromium.launch({
+    headless: true,
+    args: [
+      "--disable-blink-features=AutomationControlled",
+      "--disable-web-security",
+      "--disable-features=IsolateOrigins,SitePerProcess",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+    ],
+  });
+
+  const context = await browser.newContext({
+    locale: "ja-JP",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    viewport: { width: 1280, height: 900 },
+  });
+
+  const page = await context.newPage();
+
+  // 移除 webdriver 標記
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", {
+      get: () => undefined,
+    });
+  });
+
+  return { browser, page };
+}
+
+// ========================
+// 房況監控
 // ========================
 async function monitorToyoko() {
-  const browser = await playwright.chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  let { browser, page } = await launchAntiBotBrowser();
 
   const url =
-    "https://www.toyoko-inn.com/search/result/room_plan/?hotel=00053&start=2026-04-08&end=2026-04-11&room=1&people=2&smoking=all&tab=roomType&sort=recommend&r_avail_only=true";
+    "https://www.toyoko-inn.com/china/search/result/room_plan/?hotel=00066&start=2025-11-18&end=2025-11-19&room=1&people=1&smoking=all&tab=roomType&sort=recommend&r_avail_only=true";
 
-  let notifiedOnce = false;
+  console.log("🚀 Toyoko 房況監控啟動（本地 Anti-bot 模式）");
 
-  console.log("🚀 Toyoko 監控開始運作");
+  let loops = 0;
 
   while (true) {
     try {
+      loops++;
+      console.log(`🔍 第 ${loops} 次檢查`);
+
       await page.goto(url, { timeout: 60000 });
       await page.waitForLoadState("networkidle");
 
-      // ⭐⭐ 等真正房型渲染完成（重點！）
-      await page.waitForSelector(
-        'div[class*="SearchResultRoomPlanParentCard_card-wrapper"] h2',
-        { timeout: 10000 }
-      );
+      // 有時 Next.js CSR 會延遲
+      await page.waitForTimeout(3000);
 
-      // 抓有房型的卡片
-      const cards = page.locator('div[class*="SearchResultRoomPlanParentCard_card-wrapper"]');
-      const count = await cards.count();
+      const selector =
+        'div[class*="SearchResultRoomPlanParentCard_card-wrapper"] h2';
 
-      if (count === 0) {
-        console.log("❌ 無房");
+      const found = await page
+        .locator(selector)
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      if (!found) {
+        console.log("❌ 無房 或 Anti-bot 阻擋");
       } else {
-        console.log(`🎉 有房！！！共 ${count} 種房型`);
-      }{
+        const cards = page.locator(
+          'div[class*="SearchResultRoomPlanParentCard_card-wrapper"]'
+        );
+        const count = await cards.count();
 
+        console.log(`🎉 找到 ${count} 種房型！`);
+
+        await sendText(`🏨 Toyoko 有房！共 ${count} 種房型！`);
 
         for (let i = 0; i < count; i++) {
           const card = cards.nth(i);
 
-          // 房型名稱
           const name = await card.locator("h2").innerText();
 
-          // // 價格
-          // let price = "未標示價格";
-          // try {
-          //   price = await card.locator('[class*="price"]').first().innerText();
-          // } catch {}
-
-          // 房型資訊（吸菸 / 12 ㎡ / 床型）
           const features = await card
             .locator(".SearchResultRoomPlanIconList_icon__BhMQs p")
             .allInnerTexts();
 
-          // screenshot
           const screenshot = await card.screenshot();
 
-          // LINE 推文字
-          await sendText(
-            `🏨【${name}】\n📌 ${features.join(
-              " / "
-            )}\n🖼️（附圖片）`
-          );
-
-          // LINE 傳圖片
+          await sendText(`【${name}】\n${features.join(" / ")}`);
           await sendImage(screenshot);
         }
-
-        notifiedOnce = true;
       }
     } catch (err) {
       console.log("⚠️ 錯誤：", err);
     }
 
-    console.log("⏳ 30 秒後再檢查...");
     await page.waitForTimeout(30000);
   }
 }
