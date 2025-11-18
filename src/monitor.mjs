@@ -1,4 +1,4 @@
-import { chromium } from "playwright-core";
+import { chromium } from "playwright";
 
 async function sendLineMessage(msg) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -31,10 +31,8 @@ async function main() {
 
   console.log("🔍 開始檢查 Toyoko:", url);
 
-  const browser = await chromium.launch({
-    headless: true,
-    executablePath: "/usr/bin/chromium"  // ⭐⭐ 核心修正點
-  });
+  // 在 Docker image 裡，Playwright 已經安裝好瀏覽器，不用指定 executablePath
+  const browser = await chromium.launch({ headless: true });
 
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: "networkidle" });
